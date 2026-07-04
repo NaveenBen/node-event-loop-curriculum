@@ -121,6 +121,13 @@ A: forEach discards the returned promises — nothing awaits them, completion
 is unknowable, rejections go unhandled. Use `for..of` + await (sequential)
 or `Promise.all(arr.map(...))` (concurrent). *(Lesson 17, trap 1)*
 
+**Q: How does `import` differ from `require` at runtime?**
+A: `require` is a synchronous function call that runs where it's written;
+`import` declarations are hoisted — the entire dependency subtree evaluates
+before any statement of the importing module, regardless of where the
+import line sits. Dynamic `import()` is the async, call-site-ordered
+escape hatch. *(Lesson 18)*
+
 ## Tier 3 — Senior ("do you know why, and what breaks")
 
 **Q: Explain starvation. Why is recursive setImmediate safe when recursive
@@ -163,6 +170,17 @@ but buffer is ≥ highWaterMark — stop until `'drain'`." Ignoring it doesn't
 error; it buffers unboundedly (the classic OOM-under-load postmortem).
 `pipe`/`pipeline` implement the stop/resume protocol automatically.
 *(Lesson 15)*
+
+**Q: What does top-level await actually do to a module — and to its
+importers?**
+A: It makes the module *async*: evaluation suspends at the await, resumes
+as a microtask when it settles, and every importer's evaluation is deferred
+until then — while sibling modules that are ready keep evaluating (so
+initialization order can change just by a module becoming async). TLA is
+contagious up the graph, and across the CJS boundary it's a hard error:
+`require()` of a TLA module throws `ERR_REQUIRE_ASYNC_MODULE`. A TLA that
+never settles doesn't hang the process — it exits with **code 13** and a
+warning naming the file. *(Lesson 18)*
 
 **Q: Why can a "fully async" service time out every request at 100% CPU?**
 A: Something is starving the poll phase — a microtask/nextTick loop or
@@ -254,6 +272,9 @@ feed the GC. (Beyond this repo's scope — profile with
 | "typeof aPromise" | `'object'` | L17 t6 |
 | "forEach can await" | It discards promises; use for..of or Promise.all+map | L17 t1 |
 | "recursive setImmediate freezes the loop like nextTick" | Opposite — one loop lap per recursion; it's the *safe* one | L9 |
+| "10k concurrent HTTP requests exhaust the 4-thread pool" | Sockets use epoll/kqueue, never the pool — but `dns.lookup` does | L7 e5 |
+| "moving an import lower in the file delays it" | Imports are hoisted; only dynamic `import()` is call-site-ordered | L18 e3 |
+| "an unsettled top-level await hangs the process" | It exits — with code 13 and a warning | L18 e4 |
 
 ## How to prep with this repo
 

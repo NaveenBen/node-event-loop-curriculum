@@ -80,6 +80,36 @@ check, missed this iteration's check queue snapshot, so it waits for the
 Result: the close callback — conceptually "slow, cleanup-tier" — beats a
 setImmediate. Phase position, not intuition, decides.
 
+## Exercise 5 — sockets don't use the pool
+
+```
+4 pool jobs + 20 sockets, all in flight...
+all 20 socket round-trips done at ~15ms — with zero free pool threads!
+all 4 pbkdf2 jobs done at ~200ms (pool was fully busy until now)
+```
+
+The proof exercise 3 hinted at: all 4 pool threads were pinned by pbkdf2
+for ~200ms, yet 20 full TCP round-trips (connect → write → echo → read)
+completed in ~15ms *during* that window. If sockets needed the pool, they'd
+have queued behind the hashes until ~200ms.
+
+Network I/O never touches the thread pool: libuv registers the sockets with
+the OS's readiness API (kqueue here, epoll on Linux) and the poll phase
+just collects "ready" notifications — no thread per socket, no pool slot
+per operation. This is *the* architectural reason Node scales to tens of
+thousands of concurrent connections with 4 worker threads:
+
+- **Pool-bound** (bounded, queueable): fs, dns.lookup, crypto.pbkdf2/
+  scrypt/randomBytes(async), zlib.
+- **OS-notification-bound** (effectively unbounded): TCP/UDP sockets, HTTP,
+  pipes, dns.resolve (c-ares).
+
+Interview framing: "10,000 concurrent HTTP requests don't compete for the
+thread pool at all — but 10 concurrent file reads *do*, and can queue
+behind 4 slow crypto calls." (One caveat worth volunteering: `dns.lookup` —
+what `fetch`/`net` use for hostnames by default — IS pool-bound, which is
+how a slow resolver can secretly stall your "network" code.)
+
 ## The one-sentence takeaway
 
 > The poll phase is where finished I/O re-enters your single JS thread —

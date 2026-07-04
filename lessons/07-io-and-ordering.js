@@ -99,12 +99,60 @@ function ex4() {
   });
 }
 
+/* ═══════ EXERCISE 5 — sockets don't use the pool: proof under saturation ═══════
+ * We saturate all 4 thread-pool workers with slow pbkdf2 jobs, then
+ * IMMEDIATELY fire 20 TCP echo round-trips. If sockets needed the pool,
+ * they'd queue behind the hashes. Predict: do the 20 round-trips finish
+ * before or after the first pbkdf2 batch?
+ *
+ * YOUR PREDICTION:
+ *
+ *
+ */
+function ex5() {
+  const crypto = require('node:crypto');
+  const net = require('node:net');
+
+  const server = net.createServer((socket) => socket.pipe(socket));
+  server.listen(0, '127.0.0.1', () => {
+    const port = server.address().port;
+    const t0 = Date.now();
+    let hashesDone = 0;
+    let echoes = 0;
+    const finish = () => { if (hashesDone === 4 && echoes === 20) server.close(); };
+
+    // Saturate the pool: 4 slow hashes occupy all 4 default threads.
+    for (let i = 1; i <= 4; i++) {
+      crypto.pbkdf2('secret', 'salt', 400_000, 64, 'sha512', () => {
+        if (++hashesDone === 4) {
+          console.log(`all 4 pbkdf2 jobs done at ${Date.now() - t0}ms (pool was fully busy until now)`);
+          finish();
+        }
+      });
+    }
+
+    // While the pool is pinned: 20 TCP round-trips.
+    for (let i = 0; i < 20; i++) {
+      const c = net.createConnection(port, '127.0.0.1', () => c.write('ping'));
+      c.on('data', () => {
+        c.end();
+        if (++echoes === 20) {
+          console.log(`all 20 socket round-trips done at ${Date.now() - t0}ms — with zero free pool threads!`);
+          finish();
+        }
+      });
+    }
+    console.log('4 pool jobs + 20 sockets, all in flight...');
+  });
+}
+
 /* ───────────────────────── runner ───────────────────────── */
 const EXERCISES = {
   1: ['where does I/O land among timers and immediates?', ex1],
   2: ['completion order ≠ call order', ex2],
   3: ['the thread pool, caught in the act', ex3],
   4: ['the close phase, the loop\'s last stop', ex4],
+  5: ['sockets don\'t use the pool: proof under saturation', ex5],
 };
 const picked = EXERCISES[process.argv[2]];
 if (!picked) {
