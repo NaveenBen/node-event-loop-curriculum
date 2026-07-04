@@ -1,7 +1,7 @@
 {
   "name": "node-event-loop-curriculum",
   "version": "1.0.0",
-  "description": "A predict-then-run curriculum for mastering the Node.js Event Loop — 12 lessons, 53 exercises, and an interactive trainer.",
+  "description": "A predict-then-run curriculum for mastering the Node.js Event Loop — 17 lessons, 78 exercises, an interactive trainer, and an interview handbook.",
   "scripts": {
     "start": "node learn.js",
     "status": "node learn.js status",
