@@ -1,59 +1,126 @@
 # The Node.js Event Loop — Inside Out
 
-A predict-then-run curriculum. You don't read about the event loop here — you
-bet against it, lose, and figure out why. That's the whole method.
+**You don't read about the event loop here. You bet against it, lose, and find out why.**
 
-18 lessons · 83 runnable exercises · an interview handbook · zero
-dependencies · Node 18+ (all expected outputs verified on Node 23)
+[![smoke](https://github.com/NaveenBen/node-event-loop-curriculum/actions/workflows/smoke.yml/badge.svg)](https://github.com/NaveenBen/node-event-loop-curriculum/actions/workflows/smoke.yml)
+![node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)
+![dependencies](https://img.shields.io/badge/dependencies-zero-blue)
+![license](https://img.shields.io/github/license/NaveenBen/node-event-loop-curriculum)
 
-The goal is zero → interview-proof: finish this and there is no Node.js
-event-loop question — predict-the-output or conceptual, junior or staff
-level — that should be able to surprise you. The conceptual half lives in
-[INTERVIEW.md](INTERVIEW.md).
+---
 
-## How to use this
+## Prove you need this in 20 seconds
 
-### Interactive mode (recommended)
+What does this print?
 
-```sh
-node learn.js            # resume from your first unattempted exercise
-node learn.js 3          # jump to lesson 3
-node learn.js 3 2        # jump to lesson 3, exercise 2
-node learn.js status     # progress map
-node learn.js reset      # wipe saved progress
+```js
+setTimeout(() => console.log('timeout'), 0);
+setImmediate(() => console.log('immediate'));
+Promise.resolve().then(() => console.log('promise'));
+process.nextTick(() => console.log('nextTick'));
+console.log('sync');
 ```
 
-The trainer shows each exercise's code, has you **type your predicted
-output line by line**, runs the real code, and grades you against it
-(✓/✗ per line — numbers are wildcarded, so "fired at 500ms" matches
-"fired at 503ms"). Timing-heavy and deliberately nondeterministic
-exercises switch to honest self-assessment instead. After each exercise:
-`[n]ext`, `[r]etry`, `[o]pen notes`, `[q]uit`. Progress is saved in
-`.progress.json` (safe to delete).
+<details>
+<summary><b>Lock in your answer, then click.</b></summary>
 
-Grading is fair by construction: exercises whose ordering *can* genuinely
-vary under OS load are the self-assessed ones — every diff-graded exercise
-is settled by queue priority or phase geometry, which your machine can't
-flip. If a graded line ever surprises you, it's the model, not the OS.
+<br>
 
-### Manual mode
+```
+sync
+nextTick
+promise
+??? ← and here's the thing: even Node doesn't know.
+```
 
-Every lesson is also a plain runnable file in `lessons/` with numbered
-**exercises**. For each exercise:
+The first three lines are law: sync code, then the `nextTick` queue, then
+promises. But `timeout` vs `immediate`? **Genuinely nondeterministic** —
+run it five times and it can flip, because a `setTimeout(0)` is secretly a
+1ms timer racing your CPU to the event loop. Most engineers with years of
+Node experience get this wrong, then get told the "right" answer wrong too.
 
-1. **Read** the exercise code in the lesson file.
-2. **Predict** the exact output. Write it in the `YOUR PREDICTION` comment
-   block *before running anything*. No skipping — the prediction is the lesson.
-3. **Run** just that exercise:
-   ```sh
-   node lessons/03-microtasks.js 2    # runs exercise 2 of lesson 3
-   node lessons/03-microtasks.js     # no number → lists the exercises
-   ```
-4. **Compare.** If you were wrong (you will be, that's good), open the
-   matching file in `notes/` for a line-by-line walkthrough of *why*.
+Lesson 6 makes you run the race, tally it, and *break* the tie on purpose.
+That's how everything here works.
 
-Don't open the notes file until you've made a prediction. Being wrong first
-is what makes the explanation stick.
+</details>
+
+---
+
+## What this is
+
+A **predict-then-run** curriculum: 18 lessons, 83 runnable exercises, an
+interactive trainer that grades your predictions against reality, and an
+interview handbook. Zero dependencies — if you have Node 18+, you're ready.
+
+Every expected output in the notes was **verified against real runs**
+(Node 23, plus CI on 18/20/22) — no folklore, no stale blog-post answers.
+Two famous myths die in here with receipts: the `setInterval` drift myth
+and the pre-Node-11 microtask ordering that half the internet still teaches.
+
+## Try it in 30 seconds
+
+```sh
+git clone https://github.com/NaveenBen/node-event-loop-curriculum.git
+cd node-event-loop-curriculum
+node learn.js
+```
+
+That's it. No install. The trainer shows you code, you type what it'll
+print, it runs the real thing and grades you line by line:
+
+```
+  Lesson 03 · exercise 1 — the classic (start/timeout/promise/end)
+
+  Type your predicted output, one line at a time.
+
+  1 ▸ start
+  2 ▸ timeout
+  3 ▸ end
+  4 ▸ promise
+
+─── graded against the real run ───
+  ✓ start
+  ✗ end       you predicted: timeout
+  ✗ promise   you predicted: end
+  ✗ timeout   you predicted: promise
+
+  score: 1/4 (25%)
+
+[n]ext · [r]etry · [o]pen notes · [q]uit ▸
+```
+
+Being wrong is the product. The friction of a failed prediction is what
+makes the correct model stick — reading never does that. Progress is saved
+in `.progress.json`, so quit anytime and `node learn.js` resumes where you
+left off (`node learn.js status` shows your map).
+
+## What you'll be able to do at the end
+
+- **Predict the output** of any ordering puzzle — timers, promises,
+  `nextTick`, `setImmediate`, I/O, thenables, mixed — and explain *why*.
+- **Diagnose real pathologies**: event-loop blocking, microtask starvation,
+  thread-pool convoys, backpressure OOMs — and name the fix.
+- **Answer interview questions at any level**, from "why doesn't
+  setTimeout(0) run immediately" to "walk me through uv_run's poll-timeout
+  computation." That's what [INTERVIEW.md](INTERVIEW.md) is for: the
+  canonical 90-second whiteboard answer, ~30 tiered Q&As, and a
+  trick-question table with one-line defenses.
+
+## The journey
+
+| Stage | Lessons | What breaks in your brain (in a good way) |
+|---|---|---|
+| **The JavaScript layer** | [1](lessons/01-call-stack.js)–[5](lessons/05-async-await.js) | The call stack, why `setTimeout(0)` lies, microtasks cutting in line, Node's secret `nextTick` queue, what `await` compiles to. |
+| **The Node/libuv layer** | [6](lessons/06-libuv-phases.js)–[11](lessons/11-escaping-the-loop.js) | The real phase loop, the 4-thread pool caught red-handed, proof sockets never touch it, blocking, starvation, timers as handles, worker threads. |
+| **Checkpoint** | [12](lessons/12-capstone-gauntlet.js) | 8 puzzles, easy → brutal. |
+| **The senior tier** | [13](lessons/13-errors-and-the-loop.js)–[16](lessons/16-production-loop.js) | Where throws actually go, `Promise.all`'s fine print, `emit()` being synchronous, backpressure, `monitorEventLoopDelay`, AsyncLocalStorage. |
+| **The gauntlet** | [17](lessons/17-interview-hell.js) | 8 real interview traps: `forEach(async)`, double-awaited promises, a throwing `nextTick`, the final boss. |
+| **The modern twist** | [18](lessons/18-esm-and-tla.js) | ES modules & top-level await: hoisting, suspended module graphs, and the mysterious exit code 13. |
+
+Each lesson has a matching walkthrough in [notes/](notes/) — correct output,
+line-by-line *why*, the misconception it kills, and a "go further"
+experiment. Don't open it before you've made a prediction. That's the one
+rule.
 
 ## The mental model you're building
 
@@ -96,46 +163,34 @@ is what makes the explanation stick.
    in Node — and also the easiest way to starve everything (lesson 9).
 ```
 
-## Lessons
+By lesson 18 you'll draw this from memory — and know exactly which claims
+in other people's diagrams are wrong.
 
-| # | File | What you'll internalize |
-|---|------|------------------------|
-| 1 | [01-call-stack.js](lessons/01-call-stack.js) | Nothing async runs until the stack is empty. Ever. |
-| 2 | [02-task-queue.js](lessons/02-task-queue.js) | `setTimeout(fn, 0)` is a request, not a command. Timer ordering + clamping. |
-| 3 | [03-microtasks.js](lessons/03-microtasks.js) | Microtasks (promises) drain *completely* before the next task. Chained `.then` hops. |
-| 4 | [04-nexttick.js](lessons/04-nexttick.js) | `process.nextTick` beats even promises. Node's secret pre-queue. |
-| 5 | [05-async-await.js](lessons/05-async-await.js) | What `await` compiles down to. Why line order ≠ run order in async fns. |
-| 6 | [06-libuv-phases.js](lessons/06-libuv-phases.js) | The real loop: timers → poll → check. `setImmediate` vs `setTimeout(0)`, incl. the famous nondeterministic case. |
-| 7 | [07-io-and-ordering.js](lessons/07-io-and-ordering.js) | Where `fs.readFile` callbacks land, the 4-thread pool caught in the act, and proof that sockets never touch it. |
-| 8 | [08-blocking-the-loop.js](lessons/08-blocking-the-loop.js) | One slow sync function delays every timer, request, and I/O. Measuring loop lag. |
-| 9 | [09-starvation.js](lessons/09-starvation.js) | Recursive nextTick/microtasks freeze the loop forever; recursive `setImmediate` doesn't. Why. |
-| 10 | [10-timers-deep-dive.js](lessons/10-timers-deep-dive.js) | `setInterval` drift, `unref()`, and why Node knows when to exit. |
-| 11 | [11-escaping-the-loop.js](lessons/11-escaping-the-loop.js) | When the loop is the wrong tool: `worker_threads` keep timers alive during CPU work. |
-| 12 | [12-capstone-gauntlet.js](lessons/12-capstone-gauntlet.js) | 8 mixed puzzles, easy → brutal. First checkpoint. |
-| 13 | [13-errors-and-the-loop.js](lessons/13-errors-and-the-loop.js) | Where throws go: try/catch vs future stacks, rejections, uncaughtException, the 'error' event. |
-| 14 | [14-promise-combinators.js](lessons/14-promise-combinators.js) | `all`/`race`/`any` fine print: result order, fail-fast without cancellation, thenable unwrap costs. |
-| 15 | [15-emitters-and-streams.js](lessons/15-emitters-and-streams.js) | `emit()` is synchronous; streams and backpressure — `write() === false` and `'drain'`. |
-| 16 | [16-production-loop.js](lessons/16-production-loop.js) | `monitorEventLoopDelay` (alert on p99), AsyncLocalStorage context, chunking with setImmediate. |
-| 17 | [17-interview-hell.js](lessons/17-interview-hell.js) | 8 real interview traps (forEach+async, double await, throwing nextTick...). The final boss. |
-| 18 | [18-esm-and-tla.js](lessons/18-esm-and-tla.js) | ES modules & top-level await: import hoisting, suspended module graphs, exit code 13. |
+## Who this is for
 
-Lessons 1–5 are about **JavaScript's** queues (stack, tasks, microtasks —
-mostly true in browsers too). Lessons 6–11 are about **Node/libuv**
-specifically. Lesson 12 is the first checkpoint; 13–16 are the
-senior/production tier (errors, combinators, backpressure, observability);
-17 is the interview gauntlet; 18 covers how ES modules and top-level await
-change the startup rules.
+- **You use async/await daily but couldn't explain what `await` actually
+  does** → start at lesson 1, it builds from zero async knowledge.
+- **You're prepping for interviews** → do all 18, target 8/8 on both
+  gauntlets *with spoken reasoning*, then drill [INTERVIEW.md](INTERVIEW.md).
+- **You think you already know this** → go straight to
+  `node learn.js 17 8`. If you clear the final boss cold, you were right.
 
-## Interview prep
+## The fine print
 
-[INTERVIEW.md](INTERVIEW.md) is the conceptual companion: the canonical
-90-second "explain the event loop" whiteboard answer, ~30 tiered Q&As
-(junior → staff) each mapped to the lesson that proves it, and a
-trick-question inventory with one-line defenses. Suggested path: lessons
-1–11 with the trainer → gauntlets 12 and 17 (target 8/8 with spoken
-reasoning) → the handbook → rehearse the whiteboard answer out loud.
+**Manual mode** — every lesson also runs standalone, no trainer:
+`node lessons/03-microtasks.js 2` runs one exercise; no argument lists them.
 
-## Glossary
+**Grading is fair by construction** — exercises whose ordering can genuinely
+vary under OS load are self-assessed, never diff-graded; every graded
+exercise is settled by queue priority or phase geometry, which your machine
+can't flip.
+
+**A few exercises do real CPU work on purpose** (pbkdf2 hashing, a ~33 MB
+JSON parse, fib(33)) so you can *feel* the loop block. Each takes at most a
+few seconds, runs only when you invoke it, and always terminates on its own.
+
+<details>
+<summary><b>Glossary</b> (task, microtask, tick, phase, poll, handle...)</summary>
 
 - **Task (macrotask)** — a callback scheduled to run as its own turn of the
   loop: timer callbacks, I/O callbacks, `setImmediate`. One runs, then the
@@ -154,13 +209,11 @@ reasoning) → the handbook → rehearse the whiteboard answer out loud.
   spinning. When nothing referenced remains, Node exits. `unref()` opts a
   handle out of this count.
 
-## A note on heavy exercises
-
-A few exercises intentionally do real CPU work so you can *feel* the loop
-block: lesson 7 hashes with `pbkdf2`, lesson 8 parses a ~33 MB JSON string,
-lesson 11 computes `fib(33)`. Each takes at most a few seconds, runs only
-when you explicitly invoke that exercise, and always terminates on its own.
+</details>
 
 ## License
 
 [MIT](LICENSE) — learn from it, fork it, teach with it.
+
+If a prediction genuinely surprised you, that's the repo working —
+⭐ star it so it can surprise the next person.
