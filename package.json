@@ -1,0 +1,28 @@
+{
+  "name": "node-event-loop-curriculum",
+  "version": "1.0.0",
+  "description": "A predict-then-run curriculum for mastering the Node.js Event Loop — 12 lessons, 53 exercises, and an interactive trainer.",
+  "scripts": {
+    "start": "node learn.js",
+    "status": "node learn.js status",
+    "test": "node learn.js status"
+  },
+  "keywords": [
+    "nodejs",
+    "event-loop",
+    "libuv",
+    "async",
+    "microtasks",
+    "learning",
+    "curriculum"
+  ],
+  "author": "Naveeen <munna.naveen786@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NaveenBen/node-event-loop-curriculum.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
