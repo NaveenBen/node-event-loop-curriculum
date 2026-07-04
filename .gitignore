@@ -1,12 +1,6 @@
 # learner progress (personal, machine-local)
 .progress.json
 
-# internal build/review artifacts — not part of the published curriculum
-ci.md
-gi.md
-review.md
-copilot-review.md
-
 # environment noise
 node_modules/
 .DS_Store

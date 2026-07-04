@@ -1,0 +1,38 @@
+name: smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Discovery spawns every lesson's menu — verifies all 18 lessons parse and run.
+      - name: trainer discovers all lessons
+        run: node learn.js status
+
+      # The gauntlets are deterministic by design — run every puzzle.
+      - name: capstone gauntlet (lesson 12)
+        run: for p in 1 2 3 4 5 6 7 8; do node lessons/12-capstone-gauntlet.js $p; done
+      - name: interview hell (lesson 17)
+        run: for p in 1 2 3 4 5 6 7 8; do node lessons/17-interview-hell.js $p; done
+
+      # Fast deterministic spot checks across the tiers.
+      - name: spot checks
+        run: |
+          node lessons/03-microtasks.js 1
+          node lessons/04-nexttick.js 3
+          node lessons/06-libuv-phases.js 3
+          node lessons/13-errors-and-the-loop.js 2
+          node lessons/14-promise-combinators.js 5
+          node lessons/18-esm-and-tla.js 3
