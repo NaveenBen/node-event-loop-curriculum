@@ -105,9 +105,26 @@ function runExercise(item) {
   return out.replace(/\n+$/, '').split('\n');
 }
 
-// Digit runs become '#' so "fired at 500ms" matches "fired at 503ms".
+// Forgiving-but-honest comparison, two layers:
+//  - `loose` forgives typography that isn't event-loop knowledge:
+//    case, all whitespace ("b:end" == "b: end"), trailing punctuation
+//    ("...at 0ms" == "...at 0ms...").
+//  - `normalize` additionally wildcards values: digit runs ("500ms" ==
+//    "503ms"), digits with units, and ${...} template literals copied
+//    straight from the exercise source.
+const loose = (line) =>
+  line
+    .toLowerCase()
+    .replace(/[.…!?:;,]+\s*$/g, '')
+    .replace(/\s+/g, '');
+
 const normalize = (line) =>
-  line.trim().toLowerCase().replace(/\d+/g, '#').replace(/\s+/g, ' ');
+  loose(
+    line
+      .replace(/\$\{[^}]*\}/g, '#')
+      .replace(/\d+\s*ms\b/gi, '#')
+      .replace(/\d[\d,._]*/g, '#'),
+  );
 
 function grade(predicted, actual) {
   const total = Math.max(actual.length, predicted.length, 1);
@@ -116,8 +133,11 @@ function grade(predicted, actual) {
   for (let i = 0; i < Math.max(actual.length, predicted.length); i++) {
     const a = actual[i]; const p = predicted[i];
     const ok = a !== undefined && p !== undefined && normalize(a) === normalize(p);
+    // Matched only because values were wildcarded? Flag it — a ✓ must not
+    // silently validate a wrong timing/count model.
+    const valuesDiffer = ok && loose(a) !== loose(p);
     if (ok) correct++;
-    rows.push({ ok, a, p });
+    rows.push({ ok, a, p, valuesDiffer });
   }
   return { score: correct / total, correct, total, rows };
 }
@@ -192,12 +212,22 @@ function makeReader() {
   });
   return {
     async ask(prompt) {
-      process.stdout.write(prompt);
       let line;
-      if (queue.length) line = queue.shift();
-      else if (closed) line = '\x04';
-      else line = await new Promise((resolve) => { waiter = resolve; });
-      if (line !== '\x04' && !process.stdin.isTTY) console.log(line); // echo piped input
+      if (queue.length) {
+        // Answer arrived before we asked (paste / type-ahead / pipe):
+        // reconstruct the intended display so the transcript stays readable.
+        line = queue.shift();
+        console.log(prompt + line);
+      } else if (closed) {
+        line = '\x04';
+      } else {
+        // Let readline own the prompt — mixing raw stdout writes with
+        // terminal-mode readline makes it redraw its default '> ' prompt.
+        rl.setPrompt(prompt);
+        rl.prompt();
+        line = await new Promise((resolve) => { waiter = resolve; });
+        if (line !== '\x04' && !process.stdin.isTTY) console.log(line); // echo piped input
+      }
       return line === '\x04' ? line : line.trim();
     },
     close: () => rl.close(),
@@ -208,6 +238,7 @@ const ask = (reader, q) => reader.ask(q);
 
 async function collectPrediction(rl) {
   console.log(dim('\nType your predicted output, one line at a time.'));
+  console.log(dim('Numbers are wildcards — "at 500ms" matches "at 503ms", so write any plausible value.'));
   console.log(dim("Empty line = done. Type 'skip' to run without a typed prediction.\n"));
   const lines = [];
   for (;;) {
@@ -251,14 +282,20 @@ async function runOne(rl, item, progress) {
     } else {
       const { score, correct, total, rows } = grade(predicted, actual);
       console.log(bold('\n─── graded against the real run ───'));
-      for (const { ok, a, p } of rows) {
-        if (ok) console.log(`  ${green('✓')} ${a}`);
+      for (const { ok, a, p, valuesDiffer } of rows) {
+        if (ok && valuesDiffer) {
+          console.log(`  ${green('✓')}${yellow('~')} ${a}  ${yellow(`(you wrote: ${p})`)}`);
+        } else if (ok) console.log(`  ${green('✓')} ${a}`);
         else if (a === undefined) console.log(`  ${red('✗')} ${dim('(nothing — output ended)')}  ${dim(`you predicted: ${p}`)}`);
         else console.log(`  ${red('✗')} ${a}  ${dim(`you predicted: ${p ?? '(nothing)'}`)}`);
       }
       const pct = (100 * score).toFixed(0);
       const color = score >= 0.99 ? green : score > 0 ? yellow : red;
       console.log(`\n  score: ${color(bold(`${correct}/${total} (${pct}%)`))}`);
+      if (rows.some((r) => r.valuesDiffer)) {
+        console.log(yellow('  ~ = right line, different values. Values are wildcards for grading —'));
+        console.log(yellow('    but if the ACTUAL numbers surprise you, your timing model is off. Check the notes.'));
+      }
       scored = score;
     }
   } else {
