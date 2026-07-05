@@ -62,7 +62,9 @@ and the pre-Node-11 microtask ordering that half the internet still teaches.
 ```sh
 git clone https://github.com/NaveenBen/node-event-loop-curriculum.git
 cd node-event-loop-curriculum
-node learn.js
+node learn.js          # start / resume the course
+node learn.js menu     # or pick a lesson with arrow keys
+node learn.js review   # re-drill what you've done, weakest first
 ```
 
 That's it. No install. The trainer shows you code, you type what it'll

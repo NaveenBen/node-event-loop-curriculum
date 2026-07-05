@@ -7,6 +7,8 @@
  * reveals the notes on demand, and remembers your progress.
  *
  *   node learn.js            resume from the first unattempted exercise
+ *   node learn.js menu       pick a lesson with arrow keys
+ *   node learn.js review     re-drill exercises you've done, weakest first
  *   node learn.js 3          start at lesson 3, exercise 1
  *   node learn.js 3 2        start at lesson 3, exercise 2
  *   node learn.js status     progress map
@@ -19,6 +21,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const readline = require('node:readline/promises');
+const readlineBase = require('node:readline');
 
 const ROOT = __dirname;
 const LESSONS_DIR = path.join(ROOT, 'lessons');
@@ -94,6 +97,104 @@ function notesSection(item) {
   } catch {
     return `(notes file missing: ${notesFile})`;
   }
+}
+
+/* ───────── terminal markdown rendering for notes ───────── */
+function renderMd(md) {
+  const out = [];
+  let inCode = false;
+  for (const line of md.split('\n')) {
+    if (line.startsWith('```')) { inCode = !inCode; continue; }
+    if (inCode) { out.push('    ' + cyan(line)); continue; }
+    let l = line;
+    if (l.startsWith('## ')) { out.push(bold(cyan(l.slice(3)))); continue; }
+    if (l.startsWith('### ')) { out.push(bold(l.slice(4))); continue; }
+    l = l.replace(/\*\*([^*]+)\*\*/g, (_, t) => bold(t));
+    l = l.replace(/`([^`]+)`/g, (_, t) => yellow(t));
+    if (l.startsWith('> ')) l = dim('│ ') + l.slice(2);
+    out.push(l);
+  }
+  return out.join('\n');
+}
+
+/* ───────── the lesson menu ───────── */
+function menuRows(items, progress) {
+  const byLesson = new Map();
+  for (const it of items) {
+    if (!byLesson.has(it.lessonName)) byLesson.set(it.lessonName, []);
+    byLesson.get(it.lessonName).push(it);
+  }
+  return [...byLesson.entries()].map(([name, exs]) => {
+    const cells = exs.map((it) => {
+      const rec = progress[it.key];
+      if (!rec) return dim('·');
+      return rec.score >= 0.99 ? green('✓') : rec.score > 0 ? yellow('◐') : red('✗');
+    }).join('');
+    const doneCount = exs.filter((it) => progress[it.key]).length;
+    const firstGap = exs.find((it) => !progress[it.key]) ?? exs[0];
+    return {
+      label: `${name.padEnd(26)} ${cells}  ${dim(`${doneCount}/${exs.length}`)}`,
+      startIdx: items.indexOf(firstGap),
+      allDone: doneCount === exs.length,
+    };
+  });
+}
+
+// Arrow-key picker on a TTY; numbered fallback everywhere else.
+// Returns an index into `items`, or null (cancelled).
+async function lessonMenu(items, progress) {
+  const rows = menuRows(items, progress);
+
+  if (!process.stdin.isTTY) {
+    const rl = makeReader();
+    console.log(bold('\nLessons:\n'));
+    rows.forEach((r, i) => console.log(`  ${String(i + 1).padStart(2)}. ${r.label}`));
+    const a = await rl.ask('\nlesson number (or Enter to cancel) ▸ ');
+    rl.close();
+    const n = parseInt(a, 10);
+    return Number.isInteger(n) && rows[n - 1] ? rows[n - 1].startIdx : null;
+  }
+
+  return new Promise((resolve) => {
+    const { stdin, stdout } = process;
+    readlineBase.emitKeypressEvents(stdin);
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    let sel = rows.findIndex((r) => !r.allDone);
+    if (sel < 0) sel = 0;
+
+    console.log(bold('\nPick a lesson — ↑/↓ then Enter, q to cancel\n'));
+    const draw = (redraw) => {
+      if (redraw) stdout.write(`\x1b[${rows.length}A`);
+      for (let i = 0; i < rows.length; i++) {
+        stdout.write(`\x1b[2K${i === sel ? cyan('▶ ') : '  '}${rows[i].label}\n`);
+      }
+    };
+    draw(false);
+
+    const finish = (val) => {
+      stdin.removeListener('keypress', onKey);
+      stdin.setRawMode(wasRaw);
+      stdin.pause();
+      resolve(val);
+    };
+    const onKey = (str, key) => {
+      if (!key) return;
+      if (key.name === 'up' || key.name === 'k') sel = (sel - 1 + rows.length) % rows.length;
+      else if (key.name === 'down' || key.name === 'j') sel = (sel + 1) % rows.length;
+      else if (key.name === 'return') return finish(rows[sel].startIdx);
+      else if (key.name === 'q' || key.name === 'escape') return finish(null);
+      else if (key.ctrl && key.name === 'c') { finish(null); return; }
+      else if (/^[1-9]$/.test(str ?? '')) {
+        const n = parseInt(str, 10) - 1;
+        if (rows[n]) { sel = n; }
+      }
+      draw(true);
+    };
+    stdin.on('keypress', onKey);
+  });
 }
 
 /* ───────── running + grading ───────── */
@@ -260,11 +361,17 @@ async function selfAssess(rl) {
   }
 }
 
-async function runOne(rl, item, progress) {
+async function runOne(rl, item, progress, allItems) {
   const header = `Lesson ${item.lessonNum} · exercise ${item.exNum} — ${item.title}`;
+  const attempted = Object.keys(progress).length;
+  const avg = attempted
+    ? Math.round(100 * Object.values(progress).reduce((s, r) => s + r.score, 0) / attempted)
+    : null;
   console.log('\n' + bold('═'.repeat(Math.min(70, header.length + 4))));
   console.log(bold(`  ${header}`));
-  console.log(bold('═'.repeat(Math.min(70, header.length + 4))) + '\n');
+  console.log(bold('═'.repeat(Math.min(70, header.length + 4))));
+  console.log(dim(`  exercise ${allItems.indexOf(item) + 1} of ${allItems.length}` +
+    (avg !== null ? ` · ${attempted} attempted · avg ${avg}%` : '')) + '\n');
   console.log(exerciseSource(item));
 
   let scored = null;
@@ -314,15 +421,39 @@ async function runOne(rl, item, progress) {
   record(progress, item.key, scored);
 
   for (;;) {
-    const a = (await ask(rl, `\n${dim('[n]ext · [r]etry · [o]pen notes · [q]uit')} ▸ `)).toLowerCase();
+    const a = (await ask(rl, `\n${dim('[n]ext · [r]etry · [o]pen notes · [m]enu · [q]uit')} ▸ `)).toLowerCase();
     if (a === '' || a === 'n') return 'next';
     if (a === 'r') return 'retry';
+    if (a === 'm') return 'menu';
     if (a === 'q' || a === '\x04') return 'quit';
     if (a === 'o') {
       console.log('\n' + dim('─'.repeat(60)));
-      console.log(notesSection(item));
+      console.log(renderMd(notesSection(item)));
       console.log(dim('─'.repeat(60)));
     }
+  }
+}
+
+// Drive a sequence of exercises; supports jumping via the lesson menu.
+async function session(items, progress, startIdx) {
+  let idx = startIdx;
+  for (;;) {
+    const rl = makeReader();
+    let action = 'quit';
+    while (idx < items.length) {
+      action = await runOne(rl, items[idx], progress, items);
+      if (action === 'quit' || action === 'menu') break;
+      if (action === 'next') idx++;
+      // 'retry' keeps idx as-is
+    }
+    rl.close();
+    if (action === 'menu') {
+      const pick = await lessonMenu(items, progress);
+      if (pick === null) return 'quit';
+      idx = pick;
+      continue;
+    }
+    return idx >= items.length ? 'finished' : 'quit';
   }
 }
 
@@ -342,8 +473,27 @@ async function main() {
     return;
   }
 
+  if (args[0] === 'review') {
+    const done = items.filter((it) => progress[it.key]);
+    if (!done.length) {
+      console.log('Nothing to review yet — attempt some exercises first: node learn.js');
+      return;
+    }
+    const order = [...done].sort((x, y) =>
+      (progress[x.key].score - progress[y.key].score) ||
+      (new Date(progress[x.key].at) - new Date(progress[y.key].at)));
+    console.log(dim(`Review mode: re-drilling your ${order.length} attempted exercises, weakest and oldest first.`));
+    const end = await session(order, progress, 0);
+    if (end === 'finished') console.log(green(bold('\nReview complete. The model holds.\n')));
+    else console.log(dim('\nProgress saved. Resume the course with: node learn.js\n'));
+    return;
+  }
+
   let idx;
-  if (args.length) {
+  if (args[0] === 'menu') {
+    idx = await lessonMenu(items, progress);
+    if (idx === null) return;
+  } else if (args.length) {
     const lesson = String(args[0]).padStart(2, '0');
     const ex = args[1] ?? '1';
     idx = items.findIndex((it) => it.lessonNum === lesson && it.exNum === String(ex));
@@ -359,17 +509,11 @@ async function main() {
       return;
     }
     console.log(dim(`Resuming at the first unattempted exercise (lesson ${items[idx].lessonNum}, exercise ${items[idx].exNum}).`));
+    console.log(dim('(Prefer to jump around? node learn.js menu)'));
   }
 
-  const rl = makeReader();
-  while (idx < items.length) {
-    const action = await runOne(rl, items[idx], progress);
-    if (action === 'quit') break;
-    if (action === 'next') idx++;
-    // 'retry' keeps idx as-is
-  }
-  rl.close();
-  if (idx >= items.length) showStatus(items, progress);
+  const end = await session(items, progress, idx);
+  if (end === 'finished') showStatus(items, progress);
   else console.log(dim('\nProgress saved. Pick up where you left off with: node learn.js\n'));
 }
 
