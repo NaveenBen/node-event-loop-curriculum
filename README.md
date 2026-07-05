@@ -3,8 +3,7 @@
 **You don't read about the event loop here. You bet against it, lose, and find out why.**
 
 [![smoke](https://github.com/NaveenBen/node-event-loop-curriculum/actions/workflows/smoke.yml/badge.svg)](https://github.com/NaveenBen/node-event-loop-curriculum/actions/workflows/smoke.yml)
-![node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)
-![dependencies](https://img.shields.io/badge/dependencies-zero-blue)
+![node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
 ![license](https://img.shields.io/github/license/NaveenBen/node-event-loop-curriculum)
 
 ---
@@ -50,25 +49,28 @@ That's how everything here works.
 
 A **predict-then-run** curriculum: 18 lessons, 83 runnable exercises, an
 interactive trainer that grades your predictions against reality, and an
-interview handbook. Zero dependencies — if you have Node 18+, you're ready.
+interview handbook. All you need is Node 20+.
 
 Every expected output in the notes was **verified against real runs**
 (Node 23, plus CI on 18/20/22) — no folklore, no stale blog-post answers.
 Two famous myths die in here with receipts: the `setInterval` drift myth
 and the pre-Node-11 microtask ordering that half the internet still teaches.
 
-## Try it in 30 seconds
+## Try it in 60 seconds
 
 ```sh
 git clone https://github.com/NaveenBen/node-event-loop-curriculum.git
 cd node-event-loop-curriculum
+npm install
 node learn.js          # start / resume the course
 node learn.js menu     # or pick a lesson with arrow keys
 node learn.js review   # re-drill what you've done, weakest first
 ```
 
-That's it. No install. The trainer shows you code, you type what it'll
-print, it runs the real thing and grades you line by line:
+The trainer shows you code, you type what it'll print, it runs the real
+thing and grades you line by line — with a character-level diff on every
+miss, so you can see whether you were wrong about the *event loop* or just
+about a space:
 
 ```
   Lesson 03 · exercise 1 — the classic (start/timeout/promise/end)
@@ -179,8 +181,10 @@ in other people's diagrams are wrong.
 
 ## The fine print
 
-**Manual mode** — every lesson also runs standalone, no trainer:
-`node lessons/03-microtasks.js 2` runs one exercise; no argument lists them.
+**Manual mode** — every lesson also runs standalone, no trainer and no
+dependencies: `node lessons/03-microtasks.js 2` runs one exercise; no
+argument lists them. (Only the trainer needs `npm install` — the lessons
+themselves are plain Node.)
 
 **Grading is fair by construction** — exercises whose ordering can genuinely
 vary under OS load are self-assessed, never diff-graded; every graded

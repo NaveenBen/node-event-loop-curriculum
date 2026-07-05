@@ -10,12 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [18, 20, 22]
+        node: [20, 22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
 
       # Discovery spawns every lesson's menu — verifies all 18 lessons parse and run.
       - name: trainer discovers all lessons
