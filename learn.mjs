@@ -420,13 +420,39 @@ const ask = (reader, q) => reader.ask(q);
 async function collectPrediction(rl) {
   console.log(dim('\nType your predicted output, one line at a time.'));
   console.log(dim('Numbers are wildcards — "at 500ms" matches "at 503ms", so write any plausible value.'));
-  console.log(dim("Empty line = done. Type 'skip' to run without a typed prediction.\n"));
+  console.log(dim("Empty line = done · 'skip' = run without predicting"));
+  console.log(dim('Changed your mind? /e N edits line N · /d drops the last line · /l relists\n'));
   const lines = [];
+  const relist = () => {
+    if (!lines.length) { console.log(dim('  (no lines yet)')); return; }
+    lines.forEach((l, i) => console.log(cyan(`  ${i + 1} ▸ `) + l));
+  };
   for (;;) {
     const line = await ask(rl, cyan(`  ${lines.length + 1} ▸ `));
     if (line === '\x04') return null;
     if (line === 'skip' && lines.length === 0) return 'skip';
     if (line === '') return lines;
+
+    if (line === '/l') { relist(); continue; }
+    if (line === '/d' || line === '/undo') {
+      if (lines.length) console.log(dim(`  dropped line ${lines.length}: ${lines.pop()}`));
+      else console.log(dim('  nothing to drop'));
+      continue;
+    }
+    const editMatch = line.match(/^\/e\s*(\d+)$/);
+    if (editMatch) {
+      const n = parseInt(editMatch[1], 10);
+      if (n >= 1 && n <= lines.length) {
+        console.log(dim(`  line ${n} is: ${lines[n - 1]}`));
+        const replacement = await ask(rl, cyan(`  ${n} ✎ `));
+        if (replacement === '\x04') return null;
+        if (replacement === '') console.log(dim('  (kept as is)'));
+        else { lines[n - 1] = replacement; relist(); }
+      } else {
+        console.log(dim(`  no line ${n} yet`));
+      }
+      continue;
+    }
     lines.push(line);
   }
 }
