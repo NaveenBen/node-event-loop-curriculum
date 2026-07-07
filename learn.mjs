@@ -316,19 +316,42 @@ function menuRows(items, progress) {
   });
 }
 
-// Arrow-key picker on a TTY; numbered fallback everywhere else.
-// Returns an index into `items`, or null (cancelled).
+// Two-level arrow-key picker on a TTY (lessons → exercises); numbered
+// fallback everywhere else. Returns an index into `items`, or null.
 async function lessonMenu(items, progress) {
-  const rows = menuRows(items, progress);
+  const lessons = [...byLesson(items).entries()];   // [name, exercises][]
+  const lessonRows = menuRows(items, progress);
+
+  const statusCell = (it) => {
+    const rec = progress[it.key];
+    if (!rec) return dim('·');
+    return rec.score >= 0.99 ? green('✓') : rec.score > 0 ? yellow('◐') : red('✗');
+  };
+  const exerciseRows = (li) => lessons[li][1].map((it) => ({
+    label: `${statusCell(it)}  ${it.exNum}. ${it.title}${it.mode === 'observe' ? dim('  (self-assessed)') : ''}`,
+    idx: items.indexOf(it),
+  }));
+  const firstGapIn = (li) => {
+    const exs = lessons[li][1];
+    const gap = exs.findIndex((it) => !progress[it.key]);
+    return gap === -1 ? 0 : gap;
+  };
 
   if (!process.stdin.isTTY) {
     const rl = makeReader();
     console.log(bold('\nLessons:\n'));
-    rows.forEach((r, i) => console.log(`  ${String(i + 1).padStart(2)}. ${r.label}`));
+    lessonRows.forEach((r, i) => console.log(`  ${String(i + 1).padStart(2)}. ${r.label}`));
     const a = await rl.ask('\nlesson number (or Enter to cancel) ▸ ');
-    rl.close();
     const n = parseInt(a, 10);
-    return Number.isInteger(n) && rows[n - 1] ? rows[n - 1].startIdx : null;
+    if (!Number.isInteger(n) || !lessonRows[n - 1]) { rl.close(); return null; }
+    const rows = exerciseRows(n - 1);
+    console.log('');
+    rows.forEach((r) => console.log(`  ${r.label}`));
+    const e = await rl.ask('\nexercise number (Enter = first unattempted) ▸ ');
+    rl.close();
+    const en = parseInt(e, 10);
+    const row = rows[en - 1];
+    return row ? row.idx : rows[firstGapIn(n - 1)].idx;
   }
 
   return new Promise((resolve) => {
@@ -338,17 +361,24 @@ async function lessonMenu(items, progress) {
     stdin.setRawMode(true);
     stdin.resume();
 
-    let sel = rows.findIndex((r) => !r.allDone);
-    if (sel < 0) sel = 0;
+    let level = 0;                                   // 0 = lessons, 1 = exercises
+    let li = lessonRows.findIndex((r) => !r.allDone);
+    if (li < 0) li = 0;
+    let ei = 0;
+    let lastLines = 0;
 
-    console.log('\n' + box(bold('Pick a lesson') + dim('   ↑/↓ then Enter · q to cancel')) + '\n');
-    const draw = (redraw) => {
-      if (redraw) stdout.write(`\x1b[${rows.length}A`);
-      for (let i = 0; i < rows.length; i++) {
-        stdout.write(`\x1b[2K${i === sel ? cyan('▶ ') : '  '}${rows[i].label}\n`);
-      }
+    const draw = () => {
+      const rows = level === 0 ? lessonRows.map((r) => r.label) : exerciseRows(li).map((r) => r.label);
+      const sel = level === 0 ? li : ei;
+      const title = level === 0
+        ? bold('Pick a lesson') + dim('   ↑/↓ · Enter opens · q cancels')
+        : bold(lessons[li][0]) + dim('   ↑/↓ · Enter starts · ←/q back');
+      if (lastLines) stdout.write(`\x1b[${lastLines}A\x1b[J`);
+      const out = ['', title, '', ...rows.map((label, i) => `${i === sel ? cyan('▶ ') : '  '}${label}`)];
+      stdout.write(out.join('\n') + '\n');
+      lastLines = out.length;
     };
-    draw(false);
+    draw();
 
     const finish = (val) => {
       stdin.removeListener('keypress', onKey);
@@ -358,16 +388,27 @@ async function lessonMenu(items, progress) {
     };
     const onKey = (str, key) => {
       if (!key) return;
-      if (key.name === 'up' || key.name === 'k') sel = (sel - 1 + rows.length) % rows.length;
-      else if (key.name === 'down' || key.name === 'j') sel = (sel + 1) % rows.length;
-      else if (key.name === 'return') return finish(rows[sel].startIdx);
-      else if (key.name === 'q' || key.name === 'escape') return finish(null);
-      else if (key.ctrl && key.name === 'c') { finish(null); return; }
+      const len = level === 0 ? lessonRows.length : exerciseRows(li).length;
+      const move = (d) => {
+        if (level === 0) li = (li + d + len) % len;
+        else ei = (ei + d + len) % len;
+      };
+      if (key.name === 'up' || key.name === 'k') move(-1);
+      else if (key.name === 'down' || key.name === 'j') move(1);
+      else if (key.name === 'return' || key.name === 'right' || key.name === 'l') {
+        if (level === 0) { level = 1; ei = firstGapIn(li); }
+        else return finish(exerciseRows(li)[ei].idx);
+      } else if (key.name === 'left' || key.name === 'h') {
+        if (level === 1) level = 0;
+      } else if (key.name === 'q' || key.name === 'escape') {
+        if (level === 1) level = 0;
+        else return finish(null);
+      } else if (key.ctrl && key.name === 'c') { finish(null); return; }
       else if (/^[1-9]$/.test(str ?? '')) {
         const n = parseInt(str, 10) - 1;
-        if (rows[n]) { sel = n; }
+        if (n < len) { if (level === 0) li = n; else ei = n; }
       }
-      draw(true);
+      draw();
     };
     stdin.on('keypress', onKey);
   });
