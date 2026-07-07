@@ -162,6 +162,8 @@ const loose = (line) =>
   line
     .toLowerCase()
     .replace(/[—–−]/g, '-')      // em/en/minus dashes == plain hyphen
+    .replace(/→/g, '->')         // unicode arrows == ASCII arrows
+    .replace(/←/g, '<-')
     .replace(/…/g, '...')
     .replace(/['’‘"“”]/g, "'")   // straight and curly quotes are equal
     .replace(/[.…!?:;,]+\s*$/g, '')
