@@ -161,6 +161,9 @@ async function runExercise(item) {
 const loose = (line) =>
   line
     .toLowerCase()
+    .replace(/[—–−]/g, '-')      // em/en/minus dashes == plain hyphen
+    .replace(/…/g, '...')
+    .replace(/['’‘"“”]/g, "'")   // straight and curly quotes are equal
     .replace(/[.…!?:;,]+\s*$/g, '')
     .replace(/\s+/g, '');
 
